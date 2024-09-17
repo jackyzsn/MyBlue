@@ -12,12 +12,10 @@ const resources = {
 
 const locales = RNLocalize.getLocales();
 
-console.log(locales);
-
 let defaultLang = 'en';
 
 if (Array.isArray(locales)) {
-    defaultLang = locales[0].languageTag.startsWith('zh-CN') ? 'zh_CN' : 'en';
+    defaultLang = locales[0].languageCode === 'zh' ? 'zh_CN' : 'en';
 }
 
 i18next.use(initReactI18next).init({

@@ -2,27 +2,32 @@ import React, { useContext, useState, useEffect } from 'react';
 import { Text } from '@/components/ui/text';
 import { Heading } from '@/components/ui/heading';
 import { Center } from '@/components/ui/center';
+import { Switch } from '@/components/ui/switch';
+import { HStack } from '@/components/ui/hstack';
 import { useTranslation } from 'react-i18next';
-import { Dimensions, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { requestMultiple, checkMultiple, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { BleManager } from 'react-native-ble-plx';
+import { BleManager, Base64 } from 'react-native-ble-plx';
 import { MyContext } from '../context/myContext';
 import { MyContextType } from '../@types/mytype.d';
+import colors from 'tailwindcss/colors';
+import base64 from 'react-native-base64';
 
 interface ImportHomeScreenProps {
     navigation: any;
 }
-const deviceWidth = Dimensions.get('window').width;
-// const deviceHeight = Dimensions.get('window').height;
-// const contentWidth = deviceWidth - 10;
+
+const manager = new BleManager();
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function HomeScreen({ navigation }: ImportHomeScreenProps): JSX.Element {
     const { config } = useContext(MyContext) as MyContextType;
     const [hasPermission, setHasPermission] = useState(config.hasPermission);
-    const [manager] = useState(new BleManager());
     const { t } = useTranslation();
+    const [ledon, setLedon] = useState(false);
+    const [ledDisabled, setLedDisabled] = useState(false);
+    const [ledId, setLedId] = useState<string>('');
 
     const checkPermission = () => {
         if (Platform.OS === 'android') {
@@ -81,25 +86,27 @@ export function HomeScreen({ navigation }: ImportHomeScreenProps): JSX.Element {
         }
     };
 
-
-
     useEffect(() => {
         checkPermission();
     }, []);
 
     useEffect(() => {
-        const connect = async (deviceId: any) => {
+        const connect = async (deviceId: string) => {
             try {
                 await manager.connectToDevice(deviceId).then(device => {
+
                     console.log('Connected to device:', device.name);
+                    setLedDisabled(false);
 
                     // Add your logic for handling the connected device
 
                     return device.discoverAllServicesAndCharacteristics();
+
                 }).catch(error => {
                     // Handle errors
-                    console.log(error);
+                    console.error(error);
                 });
+
             } catch (error) {
                 console.error('Error connecting to device:', error);
             }
@@ -113,29 +120,21 @@ export function HomeScreen({ navigation }: ImportHomeScreenProps): JSX.Element {
                 return;
             }
 
-            manager.startDeviceScan(null, null, (error, device) => {
+            manager.startDeviceScan(null, null, (error, scannedDevice) => {
                 if (error) {
                     // Handle error (scanning will be stopped automatically)
                     console.log(error);
                     return;
                 }
 
-                console.log('Device found: ', device?.localName, device?.name, device?.id);
+                console.log('Device found: ', scannedDevice?.localName, scannedDevice?.name, scannedDevice?.id);
 
-                // Check if it is a device you are looking for based on advertisement data
-                // or other criteria.
-                if (device?.name === 'Buds2') {
-
-                    connect(device.id);
-                    // Stop scanning as it's not necessary if you are scanning for one device.
+                if (scannedDevice?.localName === 'MyESP32') {
                     manager.stopDeviceScan();
-
-                    // Proceed with connection.
-                    console.log('Connected to bluetooth..');
+                    connect(scannedDevice.id);
+                    setLedId(scannedDevice.id);
                 }
             });
-
-
         };
 
         const subscription = manager.onStateChange(state => {
@@ -149,12 +148,41 @@ export function HomeScreen({ navigation }: ImportHomeScreenProps): JSX.Element {
         }, true);
 
         return () => subscription.remove();
-    }, [manager]);
+    }, []);
+
+    const handleToggle = async () => {
+        console.log(ledon);
+        setLedon(!ledon);
+
+        const valueBase64: Base64 = !ledon ? base64.encode('jacky') : base64.encode('test');
+
+        await manager
+            .writeCharacteristicWithResponseForDevice(
+                ledId, '4fafc201-1fb5-459e-8fcc-c5c9c331914b', 'beb5483e-36e1-4688-b7f5-ea07361b26a8', valueBase64).then(value => {
+                    console.log('Write success: ', value);
+                }).catch(async error => {
+                    console.log('Write Failed: ', error);
+                });
+    };
 
     return (
         <Center>
             <Heading>{t('appname')}</Heading>
             <Text>{hasPermission ? t('has_permission') : t('no_permission')}</Text>
+
+            <HStack space="md">
+                <Switch
+                    trackColor={{ false: colors.gray[300], true: colors.gray[500] }}
+                    thumbColor={colors.gray[50]}
+                    activeThumbColor={colors.gray[50]}
+                    ios_backgroundColor={colors.gray[300]}
+                    onChange={handleToggle}
+                    value={ledon}
+                    disabled={ledDisabled}
+                />
+                <Text size="sm" >LED ON</Text>
+            </HStack>
+
         </Center>
     );
 }
